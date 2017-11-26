@@ -154,15 +154,18 @@ def discriminator(images, reuse=False):
     # TODO: Implement Function
     with tf.variable_scope('discriminator', reuse=reuse):
         
-        alpha = 0.3
-        x1 = tf.layers.conv2d(images, 64, 5, strides=2, padding='same')
+        alpha = 0.2
+        x1 = tf.layers.conv2d(images, 64, 5, strides=2, padding='same', 
+                              kernel_initializer=tf.contrib.layers.xavier_initializer(seed=2))
         relu1 = tf.maximum(alpha * x1, x1)
         
-        x2 = tf.layers.conv2d(relu1, 128, 5, strides=2, padding='same')
+        x2 = tf.layers.conv2d(relu1, 128, 5, strides=2, padding='same', 
+                              kernel_initializer=tf.contrib.layers.xavier_initializer(seed=2))
         bn2 = tf.layers.batch_normalization(x2, training=True)
         relu2 = tf.maximum(alpha * bn2, bn2)
         
-        x3 = tf.layers.conv2d(relu2, 256, 5, strides=2, padding='same')
+        x3 = tf.layers.conv2d(relu2, 256, 5, strides=2, padding='same', 
+                              kernel_initializer=tf.contrib.layers.xavier_initializer(seed=2))
         bn3 = tf.layers.batch_normalization(x3, training=True)
         relu3 = tf.maximum(alpha * bn3, bn3)
         
@@ -194,7 +197,7 @@ def generator(z, out_channel_dim, is_train=True):
     """
     # TODO: Implement Function
     with tf.variable_scope('generator', reuse=not is_train):
-        alpha = 0.3
+        alpha = 0.2
     
         x1 = tf.layers.dense(z, 2*2*512)
         x1 = tf.reshape(x1, (-1, 2, 2, 512))
@@ -225,7 +228,7 @@ tests.test_generator(generator, tf)
 # - `discriminator(images, reuse=False)`
 # - `generator(z, out_channel_dim, is_train=True)`
 
-# In[14]:
+# In[15]:
 
 
 def model_loss(input_real, input_z, out_channel_dim):
@@ -242,7 +245,7 @@ def model_loss(input_real, input_z, out_channel_dim):
     d_model_fake, d_logits_fake = discriminator(g_model, reuse=True)
     
     d_loss_real = tf.reduce_mean(
-        tf.nn.sigmoid_cross_entropy_with_logits(logits=d_logits_real, labels=tf.ones_like(d_model_real)))
+        tf.nn.sigmoid_cross_entropy_with_logits(logits=d_logits_real, labels=tf.ones_like(d_model_real)*0.9))
     d_loss_fake = tf.reduce_mean(
         tf.nn.sigmoid_cross_entropy_with_logits(logits=d_logits_fake, labels=tf.zeros_like(d_model_fake)))
     g_loss = tf.reduce_mean(
@@ -260,7 +263,7 @@ tests.test_model_loss(model_loss)
 # ### Optimization
 # Implement `model_opt` to create the optimization operations for the GANs. Use [`tf.trainable_variables`](https://www.tensorflow.org/api_docs/python/tf/trainable_variables) to get all the trainable variables.  Filter the variables with names that are in the discriminator and generator scope names.  The function should return a tuple of (discriminator training operation, generator training operation).
 
-# In[15]:
+# In[16]:
 
 
 def model_opt(d_loss, g_loss, learning_rate, beta1):
@@ -276,8 +279,11 @@ def model_opt(d_loss, g_loss, learning_rate, beta1):
     t_vars = tf.trainable_variables()
     d_vars = [var for var in t_vars if var.name.startswith('discriminator')]
     g_vars = [var for var in t_vars if var.name.startswith('generator')]
-    d_train_opt = tf.train.AdamOptimizer(learning_rate, beta1=beta1).minimize(d_loss, var_list=d_vars)
-    g_train_opt = tf.train.AdamOptimizer(learning_rate, beta1=beta1).minimize(g_loss, var_list=g_vars)
+#     d_train_opt = tf.train.AdamOptimizer(learning_rate, beta1=beta1).minimize(d_loss, var_list=d_vars)
+#     g_train_opt = tf.train.AdamOptimizer(learning_rate, beta1=beta1).minimize(g_loss, var_list=g_vars)
+    with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
+        d_train_opt = tf.train.AdamOptimizer(learning_rate, beta1=beta1).minimize(d_loss, var_list=d_vars)
+        g_train_opt = tf.train.AdamOptimizer(learning_rate, beta1=beta1).minimize(g_loss, var_list=g_vars)
     return d_train_opt, g_train_opt
 
 
@@ -291,7 +297,7 @@ tests.test_model_opt(model_opt, tf)
 # ### Show Output
 # Use this function to show the current output of the generator during training. It will help you determine how well the GANs is training.
 
-# In[16]:
+# In[17]:
 
 
 """
@@ -329,7 +335,7 @@ def show_generator_output(sess, n_images, input_z, out_channel_dim, image_mode):
 # 
 # Use the `show_generator_output` to show `generator` output while you train. Running `show_generator_output` for every batch will drastically increase training time and increase the size of the notebook.  It's recommended to print the `generator` output every 100 batches.
 
-# In[17]:
+# In[20]:
 
 
 def train(epoch_count, batch_size, z_dim, learning_rate, beta1, get_batches, data_shape, data_image_mode):
@@ -355,7 +361,7 @@ def train(epoch_count, batch_size, z_dim, learning_rate, beta1, get_batches, dat
     n_images = 25
     steps = 0
     print_interval = 10
-    show_interval = 100
+    show_interval = 30
     losses = []
     
     with tf.Session() as sess:
@@ -368,7 +374,10 @@ def train(epoch_count, batch_size, z_dim, learning_rate, beta1, get_batches, dat
                 z_sample = np.random.uniform(-1, 1, (batch_size, z_dim))
                 
                 _ = sess.run(d_train_opt, feed_dict={real_input: batch_images, z_input: z_sample, lr: learning_rate})
-                _ = sess.run(g_train_opt, feed_dict={z_input: z_sample, lr: learning_rate})
+#                 _ = sess.run(g_train_opt, feed_dict={z_input: z_sample, lr: learning_rate})
+#                 _ = sess.run(g_train_opt, feed_dict={z_input: z_sample, lr: learning_rate})
+                _ = sess.run(g_train_opt, feed_dict={z_input: z_sample, real_input: batch_images})
+                _ = sess.run(g_train_opt, feed_dict={z_input: z_sample, real_input: batch_images})
                 
                 if steps % print_interval == 0:
                     train_loss_d = d_loss.eval({z_input: z_sample, real_input: batch_images})
@@ -387,13 +396,13 @@ def train(epoch_count, batch_size, z_dim, learning_rate, beta1, get_batches, dat
 # ### MNIST
 # Test your GANs architecture on MNIST.  After 2 epochs, the GANs should be able to generate images that look like handwritten digits.  Make sure the loss of the generator is lower than the loss of the discriminator or close to 0.
 
-# In[18]:
+# In[21]:
 
 
 batch_size = 64
 z_dim = 100
 learning_rate = 0.002
-beta1 = 0.6
+beta1 = 0.5
 
 
 """
@@ -410,13 +419,13 @@ with tf.Graph().as_default():
 # ### CelebA
 # Run your GANs on CelebA.  It will take around 20 minutes on the average GPU to run one epoch.  You can run the whole epoch or stop when it starts to generate realistic faces.
 
-# In[19]:
+# In[22]:
 
 
-batch_size = 64
+batch_size = 32
 z_dim = 100
 learning_rate = 0.002
-beta1 = 0.6
+beta1 = 0.5
 
 
 """
